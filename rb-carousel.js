@@ -1,5 +1,5 @@
 /* =========================================================================
-   rb-carousel.js
+   rb-carousel.js  v1.2.0
    Robotics section interactive carousel + cross-column sync + lightbox.
    Expected DOM (built in Webflow):
      section.rb
@@ -12,7 +12,6 @@
              each .rb-row has .rb-row-lbl, .rb-row-title, .rb-row-text
            .rb-link
    One column's index drives the other (cross-column sync by data-idx).
-   =
    ========================================================================= */
 (function () {
   'use strict';
@@ -29,6 +28,7 @@
     if (!section) return;
     if (section.dataset.rbInit === '1') return;
     section.dataset.rbInit = '1';
+    try { console.log('[rb-carousel] v1.2.0 init'); } catch (e) {}
 
     // -------------------------------------------------------------------
     // Inject runtime CSS (hover / active / transitions / lightbox / bars).
@@ -164,10 +164,25 @@
     });
 
     // Image click also opens lightbox on that column at current active idx.
+    // Attach to each img directly + the container as a fallback so no stacking
+    // element can swallow the click.
+    col.imgs.forEach(function (img) {
+      img.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openLightbox(col, allCols.__activeIdx != null ? allCols.__activeIdx : 0);
+      });
+    });
+    if (col.cap) {
+      col.cap.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openLightbox(col, allCols.__activeIdx != null ? allCols.__activeIdx : 0);
+      });
+    }
     col.car.addEventListener('click', function (e) {
       if (e.target.closest('a')) return;
-      openLightbox(col, state.activeIdx);
+      openLightbox(col, allCols.__activeIdx != null ? allCols.__activeIdx : 0);
     });
+    col.car.style.cursor = 'zoom-in';
   }
 
   // =====================================================================
@@ -497,10 +512,19 @@
       '.rb .rb-prog{display:flex;gap:4px}',
       '.rb .rb-prog-seg{position:relative;flex:1;height:3px;background:rgba(255,255,255,.22);border-radius:2px;overflow:hidden}',
       '.rb .rb-prog-fill{position:absolute;left:0;top:0;bottom:0;width:0%;background:rgba(255,255,255,.9);border-radius:2px}',
-      /* Row active emphasis (lighter gray border per your spec) */
-      '.rb .rb-row{transition:border-color .2s ease, background-color .2s ease, box-shadow .2s ease;border:1px solid rgba(255,255,255,0.08);border-radius:10px;cursor:pointer}',
-      '.rb .rb-row.rb-row-active{border-color:rgba(255,255,255,0.35);box-shadow:0 0 0 1px rgba(255,255,255,0.12) inset}',
-      '.rb .rb-row:hover{border-color:rgba(255,255,255,0.28)}',
+      /* Force rows-wrap to a single stacked column regardless of Designer grid classes */
+      'section.rb .rb-rows-wrap{display:flex !important;flex-direction:column !important;grid-template-columns:none !important;gap:0 !important}',
+      /* Base row: kill Designer border/radius/background; keep only pointer + smooth transition */
+      'section.rb .rb-rows-wrap .rb-row{position:relative !important;cursor:pointer !important;background-color:transparent !important;background:none !important;border:0 !important;border-radius:0 !important;box-shadow:none !important;transition:background-color .2s ease !important;padding-left:14px !important;padding-top:14px !important;padding-bottom:14px !important;margin:0 !important}',
+      /* Subtle horizontal divider between rows (all except the last) */
+      'section.rb .rb-rows-wrap .rb-row + .rb-row{border-top:1px solid rgba(255,255,255,0.08) !important}',
+      /* Left-edge active bar (invisible by default) */
+      'section.rb .rb-rows-wrap .rb-row::before{content:"" !important;position:absolute !important;left:0 !important;top:0 !important;bottom:0 !important;width:3px !important;background:#fff !important;opacity:0 !important;transition:opacity .2s ease !important;pointer-events:none !important;display:block !important}',
+      /* Active row: faint grey tint + visible left bar */
+      'section.rb .rb-rows-wrap .rb-row.rb-row-active{background-color:rgba(255,255,255,0.05) !important}',
+      'section.rb .rb-rows-wrap .rb-row.rb-row-active::before{opacity:1 !important}',
+      /* Hover on a non-active row: very subtle lift */
+      'section.rb .rb-rows-wrap .rb-row:hover:not(.rb-row-active){background-color:rgba(255,255,255,0.025) !important}',
       /* Lightbox */
       '.rb-lb{position:fixed;inset:0;z-index:9999;display:none}',
       '.rb-lb.rb-lb-open{display:block}',
