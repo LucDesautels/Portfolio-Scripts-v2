@@ -12,7 +12,7 @@
              each .rb-row has .rb-row-lbl, .rb-row-title, .rb-row-text
            .rb-link
    One column's index drives the other (cross-column sync by data-idx).
-   
+   =
    ========================================================================= */
 (function () {
   'use strict';
