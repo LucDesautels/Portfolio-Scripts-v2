@@ -1,5 +1,5 @@
 /* =========================================================================
-   rb-carousel.js  v1.2.0
+   rb-carousel.js  v1.3.0
    Robotics section interactive carousel + cross-column sync + lightbox.
    Expected DOM (built in Webflow):
      section.rb
@@ -28,7 +28,7 @@
     if (!section) return;
     if (section.dataset.rbInit === '1') return;
     section.dataset.rbInit = '1';
-    try { console.log('[rb-carousel] v1.2.0 init'); } catch (e) {}
+    try { console.log('[rb-carousel] v1.3.0 init'); } catch (e) {}
 
     // -------------------------------------------------------------------
     // Inject runtime CSS (hover / active / transitions / lightbox / bars).
@@ -163,26 +163,28 @@
       });
     });
 
-    // Image click also opens lightbox on that column at current active idx.
-    // Attach to each img directly + the container as a fallback so no stacking
-    // element can swallow the click.
-    col.imgs.forEach(function (img) {
-      img.addEventListener('click', function (e) {
-        e.stopPropagation();
-        openLightbox(col, allCols.__activeIdx != null ? allCols.__activeIdx : 0);
-      });
+    // Lightbox click trigger: append a transparent overlay div on top of
+    // everything inside .rb-car. This bypasses the whole "is the caption
+    // on top of the image? is there a hidden link? is there a Webflow
+    // interaction?" stacking mess and guarantees clicks are captured.
+    var hotspot = document.createElement('div');
+    hotspot.className = 'rb-car-hotspot';
+    hotspot.style.cssText = 'position:absolute;inset:0;cursor:zoom-in;z-index:5;background:transparent';
+    col.car.style.position = col.car.style.position || 'relative';
+    col.car.appendChild(hotspot);
+    hotspot.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var i = allCols.__activeIdx != null ? allCols.__activeIdx : 0;
+      try { console.log('[rb-carousel] hotspot click, col:', col.el.id, 'idx:', i); } catch (ex) {}
+      openLightbox(col, i);
     });
+    // But the caption div also lives inside .rb-car and is below the hotspot
+    // in z-order — we still want its own pointer-events to work if someone
+    // ever adds a link to it. Force caption above hotspot only if it needs clicks.
     if (col.cap) {
-      col.cap.addEventListener('click', function (e) {
-        e.stopPropagation();
-        openLightbox(col, allCols.__activeIdx != null ? allCols.__activeIdx : 0);
-      });
+      col.cap.style.pointerEvents = 'none';
     }
-    col.car.addEventListener('click', function (e) {
-      if (e.target.closest('a')) return;
-      openLightbox(col, allCols.__activeIdx != null ? allCols.__activeIdx : 0);
-    });
-    col.car.style.cursor = 'zoom-in';
   }
 
   // =====================================================================
@@ -475,6 +477,7 @@
   }
 
   function openLightbox(col, idx) {
+    try { console.log('[rb-carousel] openLightbox called', {col: col && col.el && col.el.id, idx: idx, lb: !!lb}); } catch (e) {}
     if (!lb) return;
     lb._open(col, idx);
   }
