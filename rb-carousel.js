@@ -1,5 +1,5 @@
 /* =========================================================================
-   rb-carousel.js  v1.3.0
+   rb-carousel.js  v1.3.1
    Robotics section interactive carousel + cross-column sync + lightbox.
    Expected DOM (built in Webflow):
      section.rb
