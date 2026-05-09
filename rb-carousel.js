@@ -28,7 +28,7 @@
     if (!section) return;
     if (section.dataset.rbInit === '1') return;
     section.dataset.rbInit = '1';
-    try { console.log('[rb-carousel] v1.3.0 init'); } catch (e) {}
+    try { console.log('[rb-carousel] v1.3.1 init'); } catch (e) {}
 
     // -------------------------------------------------------------------
     // Inject runtime CSS (hover / active / transitions / lightbox / bars).
@@ -70,7 +70,12 @@
     startTicker(cols, state);
 
     // Lightbox setup (single shared overlay).
-    setupLightbox(cols, state);
+    try {
+      setupLightbox(cols, state);
+      console.log('[rb-carousel] setupLightbox completed, lb:', !!lb);
+    } catch (err) {
+      console.error('[rb-carousel] setupLightbox THREW:', err);
+    }
   }
 
   // =====================================================================
@@ -414,7 +419,7 @@
     }
 
     function tickLb(now) {
-      if (!lb.classList.contains('rb-lb-open')) return;
+      if (!lb || !lb.classList || !lb.classList.contains('rb-lb-open')) return;
       var col = lbState.col;
       if (!col) { lbState.tickerId = requestAnimationFrame(tickLb); return; }
       var elapsed = lbState.segElapsedBeforePause + (now - lbState.segStart);
@@ -443,7 +448,7 @@
     lbClose.addEventListener('click', function () { closeLb(); });
     lbBg.addEventListener('click', function () { closeLb(); });
     document.addEventListener('keydown', function (e) {
-      if (!lb.classList.contains('rb-lb-open')) return;
+      if (!lb || !lb.classList || !lb.classList.contains('rb-lb-open')) return;
       if (e.key === 'Escape') closeLb();
       else if (e.key === 'ArrowLeft') go(-1);
       else if (e.key === 'ArrowRight') go(1);
