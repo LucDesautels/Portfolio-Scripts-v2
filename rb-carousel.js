@@ -1,22 +1,21 @@
 /* =========================================================================
-   rb-carousel.js  v1.3.2
+   rb-carousel.js  v1.4.0
    Robotics section interactive carousel + cross-column sync + lightbox.
-   Expected DOM (built in Webflow):
-     section.rb
-       .rb-cols
-         .rb-col[id="rb-col-<key>"]
-           .rb-col-hdr > .rb-col-ttl
-           .rb-car[id="rb-car-<key>"] containing 5 <img> + .rb-cap[id="rb-cap-<key>"]
-           .rb-prog[id="rb-prog-<key>"] containing 5 .rb-prog-seg
-           .rb-rows-wrap[id="rb-rows-<key>"] containing 5 .rb-row[data-idx]
-             each .rb-row has .rb-row-lbl, .rb-row-title, .rb-row-text
-           .rb-link
-   One column's index drives the other (cross-column sync by data-idx).
+   v1.4.0 fix: hardened against duplicate script loads by storing shared
+   state on window.__rbCarousel. Multiple script copies will share the
+   same lb reference instead of each holding their own (broken) closure.
    ========================================================================= */
 (function () {
   'use strict';
 
-  // Run after DOM ready, but also re-init on Webflow's page transitions if any.
+  // Use a single shared global so duplicate <script> loads don't fight.
+  if (window.__rbCarousel && window.__rbCarousel.loaded) {
+    try { console.log('[rb-carousel] duplicate load detected, ignoring'); } catch (e) {}
+    return;
+  }
+  window.__rbCarousel = window.__rbCarousel || { loaded: false, lb: null };
+  window.__rbCarousel.loaded = true;
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
@@ -28,28 +27,21 @@
     if (!section) return;
     if (section.dataset.rbInit === '1') return;
     section.dataset.rbInit = '1';
-    try { console.log('[rb-carousel] v1.3.2 init'); } catch (e) {}
+    try { console.log('[rb-carousel] v1.4.0 init'); } catch (e) {}
 
-    // -------------------------------------------------------------------
-    // Inject runtime CSS (hover / active / transitions / lightbox / bars).
-    // Keep all visual tuning here so Designer styles are untouched.
-    // -------------------------------------------------------------------
     injectStyles();
 
     var columns = Array.prototype.slice.call(section.querySelectorAll('.rb-col'));
     if (!columns.length) return;
 
-    // Build per-column state objects.
     var cols = columns.map(buildColumnState).filter(Boolean);
     if (!cols.length) return;
 
-    // Equalize row heights across columns per index.
     equalizeRowHeights(cols);
     window.addEventListener('resize', debounce(function () {
       equalizeRowHeights(cols);
     }, 150));
 
-    // Shared active index + hover-intent state.
     var state = {
       activeIdx: 0,
       hoverPaused: false,
@@ -58,29 +50,24 @@
       tickerId: null,
       segStart: 0,
       segElapsedBeforePause: 0,
-      segDuration: 4500 // ms per slide
+      segDuration: 4500
     };
 
     cols.forEach(function (col) {
       setupColumn(col, state, cols);
     });
 
-    // Initial paint: show idx 0 on every column, start the progress ticker.
     applyActiveIndex(cols, 0);
     startTicker(cols, state);
 
-    // Lightbox setup (single shared overlay).
     try {
       setupLightbox(cols, state);
-      console.log('[rb-carousel] setupLightbox completed, lb:', !!lb);
+      console.log('[rb-carousel] setupLightbox completed, lb:', !!window.__rbCarousel.lb);
     } catch (err) {
       console.error('[rb-carousel] setupLightbox THREW:', err);
     }
   }
 
-  // =====================================================================
-  // Column state builder
-  // =====================================================================
   function buildColumnState(colEl) {
     var car = colEl.querySelector('.rb-car');
     var cap = colEl.querySelector('.rb-cap');
@@ -92,7 +79,6 @@
     var segs = prog ? Array.prototype.slice.call(prog.querySelectorAll('.rb-prog-seg')) : [];
     var rows = Array.prototype.slice.call(rowsWrap.querySelectorAll('.rb-row'));
 
-    // Ensure each seg has an inner fill bar.
     segs.forEach(function (seg) {
       if (!seg.querySelector('.rb-prog-fill')) {
         var fill = document.createElement('div');
@@ -101,36 +87,18 @@
       }
     });
 
-    // Stack images for cross-fade; first one visible.
     imgs.forEach(function (img, i) {
       img.classList.add('rb-img');
       if (i === 0) img.classList.add('rb-img-on');
       img.setAttribute('draggable', 'false');
     });
 
-    // Captions: read per-row caption from row's title + lbl, or fall back
-    // to .rb-cap text. Ideal: caption = row title. This fixes stuck caption.
     var captions = rows.map(function (row) {
       var t = row.querySelector('.rb-row-title');
       return t ? (t.textContent || '').trim() : '';
     });
-    // If no row titles found, use the original cap text for every index.
     var fallbackCap = cap ? (cap.textContent || '').trim() : '';
     captions = captions.map(function (c) { return c || fallbackCap; });
-
-    var count = Math.max(imgs.length, rows.length);
-    
-    // DEBUG: Check for zero-count columns
-    if (count === 0) {
-      try {
-        console.warn('[rb-carousel] WARNING: Column with zero count detected!', {
-          colId: colEl.id || 'no-id',
-          imgsLength: imgs.length,
-          rowsLength: rows.length,
-          element: colEl
-        });
-      } catch (e) {}
-    }
 
     return {
       el: colEl,
@@ -142,27 +110,20 @@
       segs: segs,
       rows: rows,
       captions: captions,
-      count: count
+      count: Math.max(imgs.length, rows.length)
     };
   }
 
-  // =====================================================================
-  // Per-column event wiring
-  // =====================================================================
   function setupColumn(col, state, allCols) {
-    // Row hover intent (>500ms to avoid jitter).
     col.rows.forEach(function (row) {
       var idx = parseInt(row.getAttribute('data-idx'), 10);
       if (isNaN(idx)) return;
 
       row.addEventListener('mouseenter', function () {
-        // Pause the auto ticker; do NOT change columns on enter until
-        // hover-intent timer fires.
         state.hoverPaused = true;
         state.hoverPendingIdx = idx;
         clearTimeout(state.hoverTimer);
         state.hoverTimer = setTimeout(function () {
-          // If user is still on the row, commit.
           if (state.hoverPendingIdx === idx) {
             applyActiveIndex(allCols, idx);
             resetSegTimer(state);
@@ -175,92 +136,67 @@
         state.hoverPaused = false;
       });
 
-      // Click row -> open lightbox at this index, for THIS column.
       row.addEventListener('click', function (e) {
-        if (e.target.closest('a')) return; // don't hijack real links
+        if (e.target.closest('a')) return;
         openLightbox(col, idx);
       });
     });
 
-    // Lightbox click trigger: append a transparent overlay div on top of
-    // everything inside .rb-car. This bypasses the whole "is the caption
-    // on top of the image? is there a hidden link? is there a Webflow
-    // interaction?" stacking mess and guarantees clicks are captured.
-    var hotspot = document.createElement('div');
-    hotspot.className = 'rb-car-hotspot';
-    hotspot.style.cssText = 'position:absolute;inset:0;cursor:zoom-in;z-index:5;background:transparent';
-    col.car.style.position = col.car.style.position || 'relative';
-    col.car.appendChild(hotspot);
-    hotspot.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      var i = allCols.__activeIdx != null ? allCols.__activeIdx : 0;
-      try { console.log('[rb-carousel] hotspot click, col:', col.el.id, 'idx:', i); } catch (ex) {}
-      openLightbox(col, i);
-    });
-    // But the caption div also lives inside .rb-car and is below the hotspot
-    // in z-order — we still want its own pointer-events to work if someone
-    // ever adds a link to it. Force caption above hotspot only if it needs clicks.
+    // Guard: don't add a hotspot if one already exists on this car
+    if (!col.car.querySelector('.rb-car-hotspot')) {
+      var hotspot = document.createElement('div');
+      hotspot.className = 'rb-car-hotspot';
+      hotspot.style.cssText = 'position:absolute;inset:0;cursor:zoom-in;z-index:5;background:transparent';
+      col.car.style.position = col.car.style.position || 'relative';
+      col.car.appendChild(hotspot);
+      hotspot.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var i = allCols.__activeIdx != null ? allCols.__activeIdx : 0;
+        try { console.log('[rb-carousel] hotspot click, col:', col.el.id, 'idx:', i); } catch (ex) {}
+        openLightbox(col, i);
+      });
+    }
     if (col.cap) {
       col.cap.style.pointerEvents = 'none';
     }
   }
 
-  // =====================================================================
-  // Render: apply an active index to every column
-  // =====================================================================
   function applyActiveIndex(cols, idx) {
     cols.forEach(function (col) {
       var i = Math.max(0, Math.min(idx, col.count - 1));
-
-      // Images cross-fade.
       col.imgs.forEach(function (img, n) {
         img.classList.toggle('rb-img-on', n === i);
       });
-
-      // Caption updates to match current row title.
       if (col.cap) {
         var text = col.captions[i] || '';
         if (col.cap.textContent !== text) col.cap.textContent = text;
       }
-
-      // Row active state.
       col.rows.forEach(function (row, n) {
         row.classList.toggle('rb-row-active', n === i);
       });
-
-      // Progress segments: mark 'done' for segments before active,
-      // 'active' for current, nothing for future.
       col.segs.forEach(function (seg, n) {
         seg.classList.remove('rb-seg-active', 'rb-seg-done');
         var fill = seg.querySelector('.rb-prog-fill');
         if (fill) {
           fill.style.transition = 'none';
           if (n < i) fill.style.width = '100%';
-          else if (n === i) fill.style.width = '0%';
           else fill.style.width = '0%';
         }
         if (n < i) seg.classList.add('rb-seg-done');
         else if (n === i) seg.classList.add('rb-seg-active');
       });
     });
-    // Snapshot shared active idx.
     cols.__activeIdx = idx;
   }
 
-  // =====================================================================
-  // Progress ticker (Instagram-style)
-  // =====================================================================
   function startTicker(cols, state) {
     state.segStart = performance.now();
     state.segElapsedBeforePause = 0;
 
     function frame(now) {
       var activeIdx = (cols.__activeIdx != null) ? cols.__activeIdx : 0;
-
-      // If paused by hover, hold the fill where it is and keep re-scheduling.
       if (state.hoverPaused) {
-        // Freeze: record elapsed so far, then on resume, shift segStart.
         state.segElapsedBeforePause = Math.min(
           state.segDuration,
           state.segElapsedBeforePause + (now - state.segStart)
@@ -269,11 +205,8 @@
         state.tickerId = requestAnimationFrame(frame);
         return;
       }
-
       var elapsed = state.segElapsedBeforePause + (now - state.segStart);
       var pct = Math.min(1, elapsed / state.segDuration);
-
-      // Paint the active seg fill on every column.
       cols.forEach(function (col) {
         var seg = col.segs[activeIdx];
         if (!seg) return;
@@ -283,9 +216,7 @@
           fill.style.width = (pct * 100).toFixed(2) + '%';
         }
       });
-
       if (pct >= 1) {
-        // Advance.
         var next = (activeIdx + 1) % maxCount(cols);
         applyActiveIndex(cols, next);
         resetSegTimer(state);
@@ -304,25 +235,19 @@
     return cols.reduce(function (m, c) { return Math.max(m, c.count); }, 0) || 1;
   }
 
-  // =====================================================================
-  // Row height equalization across columns per index
-  // =====================================================================
   function equalizeRowHeights(cols) {
     if (cols.length < 2) return;
     var max = maxCount(cols);
     for (var i = 0; i < max; i++) {
-      // Clear previous min-height.
       cols.forEach(function (col) {
         var r = col.rows[i];
         if (r) r.style.minHeight = '';
       });
-      // Measure natural heights.
       var heights = cols.map(function (col) {
         var r = col.rows[i];
         return r ? r.getBoundingClientRect().height : 0;
       });
       var tallest = Math.max.apply(null, heights);
-      // Apply.
       cols.forEach(function (col) {
         var r = col.rows[i];
         if (r) r.style.minHeight = tallest + 'px';
@@ -330,12 +255,14 @@
     }
   }
 
-  // =====================================================================
-  // Lightbox
-  // =====================================================================
-  var lb = null;
   function setupLightbox(cols, state) {
-    lb = document.createElement('div');
+    // Reuse existing lightbox if one was already injected (duplicate guard)
+    var existing = document.querySelector('.rb-lb');
+    if (existing) {
+      existing.remove(); // start fresh
+    }
+
+    var lb = document.createElement('div');
     lb.className = 'rb-lb';
     lb.innerHTML = [
       '<div class="rb-lb-bg"></div>',
@@ -366,6 +293,9 @@
     ].join('');
     document.body.appendChild(lb);
 
+    // Store on global so any closure (or duplicate script) can find it.
+    window.__rbCarousel.lb = lb;
+
     var lbImg = lb.querySelector('.rb-lb-img');
     var lbCap = lb.querySelector('.rb-lb-cap');
     var lbLbl = lb.querySelector('.rb-lb-lbl');
@@ -387,8 +317,7 @@
       segElapsedBeforePause: 0
     };
 
-    lb._state = lbState;
-    lb._render = function render(col, idx) {
+    lb._render = function (col, idx) {
       var i = Math.max(0, Math.min(idx, col.count - 1));
       lbState.col = col;
       lbState.idx = i;
@@ -406,7 +335,6 @@
       lbText.textContent = textOf(row, '.rb-row-text');
       lbCap.textContent = col.captions[i] || '';
 
-      // Build progress segments in lightbox to match count.
       if (lbProg.childElementCount !== col.count) {
         lbProg.innerHTML = '';
         for (var k = 0; k < col.count; k++) {
@@ -444,9 +372,7 @@
         fill.style.transition = 'none';
         fill.style.width = (pct * 100).toFixed(2) + '%';
       }
-      if (pct >= 1) {
-        go(1);
-      }
+      if (pct >= 1) go(1);
       lbState.tickerId = requestAnimationFrame(tickLb);
     }
 
@@ -456,7 +382,6 @@
       lb._render(lbState.col, next);
     }
 
-    // Events.
     lbLeft.addEventListener('click', function (e) { e.stopPropagation(); go(-1); });
     lbRight.addEventListener('click', function (e) { e.stopPropagation(); go(1); });
     lbClose.addEventListener('click', function () { closeLb(); });
@@ -471,23 +396,19 @@
     function closeLb() {
       lb.classList.remove('rb-lb-open');
       cancelAnimationFrame(lbState.tickerId);
-      // Resume section ticker.
       state.hoverPaused = false;
     }
 
-    // Expose opener.
     lb._open = function (col, idx) {
       lb._render(col, idx);
       lb.classList.add('rb-lb-open');
-      // Tutorial on first open only.
       try {
         if (!localStorage.getItem('rb_lb_tut_seen')) {
           lbTut.classList.add('rb-lb-tut-show');
           localStorage.setItem('rb_lb_tut_seen', '1');
           setTimeout(function () { lbTut.classList.remove('rb-lb-tut-show'); }, 3200);
         }
-      } catch (err) { /* storage blocked; skip tutorial */ }
-      // Pause section auto-ticker while lightbox is open.
+      } catch (err) {}
       state.hoverPaused = true;
       resetLbSeg();
       cancelAnimationFrame(lbState.tickerId);
@@ -496,14 +417,13 @@
   }
 
   function openLightbox(col, idx) {
+    // Always read from window so duplicate scripts share the same lb.
+    var lb = window.__rbCarousel && window.__rbCarousel.lb;
     try { console.log('[rb-carousel] openLightbox called', {col: col && col.el && col.el.id, idx: idx, lb: !!lb}); } catch (e) {}
     if (!lb) return;
     lb._open(col, idx);
   }
 
-  // =====================================================================
-  // Utilities
-  // =====================================================================
   function textOf(parent, sel) {
     if (!parent) return '';
     var el = parent.querySelector(sel);
@@ -518,36 +438,23 @@
     };
   }
 
-  // =====================================================================
-  // Styles
-  // =====================================================================
   function injectStyles() {
     if (document.getElementById('rb-carousel-styles')) return;
     var css = [
-      /* Carousel image stack */
       '.rb .rb-car{position:relative;overflow:hidden}',
       '.rb .rb-car img.rb-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .45s ease;pointer-events:none}',
       '.rb .rb-car img.rb-img.rb-img-on{opacity:1;pointer-events:auto;cursor:zoom-in}',
-      /* First image pinning so container has height even before JS */
       '.rb .rb-car img:first-of-type{position:relative}',
-      /* Progress segments */
       '.rb .rb-prog{display:flex;gap:4px}',
       '.rb .rb-prog-seg{position:relative;flex:1;height:3px;background:rgba(255,255,255,.22);border-radius:2px;overflow:hidden}',
       '.rb .rb-prog-fill{position:absolute;left:0;top:0;bottom:0;width:0%;background:rgba(255,255,255,.9);border-radius:2px}',
-      /* Force rows-wrap to a single stacked column regardless of Designer grid classes */
       'section.rb .rb-rows-wrap{display:flex !important;flex-direction:column !important;grid-template-columns:none !important;gap:0 !important}',
-      /* Base row: kill Designer border/radius/background; keep only pointer + smooth transition */
-      'section.rb .rb-rows-wrap .rb-row{position:relative !important;cursor:pointer !important;background-color:transparent !important;background:none !important;border:0 !important;border-radius:0 !important;padding:16px 12px !important;min-height:0 !important;transition:background-color .25s ease,transform .25s ease !important;will-change:background-color,transform}',
-      /* Subtle horizontal divider between rows (all except the last) */
+      'section.rb .rb-rows-wrap .rb-row{position:relative !important;cursor:pointer !important;background-color:transparent !important;background:none !important;border:0 !important;border-radius:0 !important;box-shadow:none !important;transition:background-color .2s ease !important;padding-left:14px !important;padding-top:14px !important;padding-bottom:14px !important;margin:0 !important}',
       'section.rb .rb-rows-wrap .rb-row + .rb-row{border-top:1px solid rgba(255,255,255,0.08) !important}',
-      /* Left-edge active bar (invisible by default) */
-      'section.rb .rb-rows-wrap .rb-row::before{content:"" !important;position:absolute !important;left:0 !important;top:0 !important;bottom:0 !important;width:3px !important;background:#fff !important;opacity:0 !important;transition:opacity .25s ease !important}',
-      /* Active row: faint grey tint + visible left bar */
+      'section.rb .rb-rows-wrap .rb-row::before{content:"" !important;position:absolute !important;left:0 !important;top:0 !important;bottom:0 !important;width:3px !important;background:#fff !important;opacity:0 !important;transition:opacity .2s ease !important;pointer-events:none !important;display:block !important}',
       'section.rb .rb-rows-wrap .rb-row.rb-row-active{background-color:rgba(255,255,255,0.05) !important}',
       'section.rb .rb-rows-wrap .rb-row.rb-row-active::before{opacity:1 !important}',
-      /* Hover on a non-active row: very subtle lift */
       'section.rb .rb-rows-wrap .rb-row:hover:not(.rb-row-active){background-color:rgba(255,255,255,0.025) !important}',
-      /* Lightbox */
       '.rb-lb{position:fixed;inset:0;z-index:9999;display:none}',
       '.rb-lb.rb-lb-open{display:block}',
       '.rb-lb-bg{position:absolute;inset:0;background:rgba(8,8,10,.82);backdrop-filter:blur(6px)}',
@@ -565,22 +472,19 @@
       '.rb-lb-lbl{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#aaa}',
       '.rb-lb-title{font-size:22px;font-weight:600;line-height:1.2}',
       '.rb-lb-text{font-size:14px;line-height:1.55;color:#ccc}',
-      '.rb-lb-close{position:absolute;top:10px;right:10px;width:36px;height:36px;border:0;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;display:grid;place-items:center;cursor:pointer;transition:background-color .2s ease}',
+      '.rb-lb-close{position:absolute;top:10px;right:10px;width:36px;height:36px;border:0;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;display:grid;place-items:center;cursor:pointer;transition:background .15s ease;z-index:3}',
       '.rb-lb-close:hover{background:rgba(255,255,255,.22)}',
-      /* Tutorial overlay */
       '.rb-lb-tut{position:absolute;inset:0;display:none;align-items:center;justify-content:space-between;padding:0 8%;pointer-events:none;color:#fff;font-size:18px;letter-spacing:.04em}',
       '.rb-lb-tut.rb-lb-tut-show{display:flex}',
       '.rb-lb-tut-left,.rb-lb-tut-right{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.4);padding:10px 16px;border-radius:999px;animation:rbTutPulse 1.6s ease-in-out infinite}',
       '.rb-lb-tut-arrow{font-size:22px}',
       '.rb-lb-tut-hint{position:absolute;left:0;right:0;bottom:10%;text-align:center;font-size:13px;color:#ddd}',
       '@keyframes rbTutPulse{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.06);opacity:1}}',
-      /* Mobile */
       '@media (max-width: 720px){',
       '  .rb-lb-main{grid-template-columns:1fr;grid-template-rows:1fr auto}',
       '  .rb-lb-inner{margin-top:2vh;height:96vh;width:96vw}',
       '}'
     ].join('\n');
-
     var tag = document.createElement('style');
     tag.id = 'rb-carousel-styles';
     tag.textContent = css;
