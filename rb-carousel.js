@@ -118,6 +118,20 @@
     var fallbackCap = cap ? (cap.textContent || '').trim() : '';
     captions = captions.map(function (c) { return c || fallbackCap; });
 
+    var count = Math.max(imgs.length, rows.length);
+    
+    // DEBUG: Check for zero-count columns
+    if (count === 0) {
+      try {
+        console.warn('[rb-carousel] WARNING: Column with zero count detected!', {
+          colId: colEl.id || 'no-id',
+          imgsLength: imgs.length,
+          rowsLength: rows.length,
+          element: colEl
+        });
+      } catch (e) {}
+    }
+
     return {
       el: colEl,
       car: car,
@@ -128,7 +142,7 @@
       segs: segs,
       rows: rows,
       captions: captions,
-      count: Math.max(imgs.length, rows.length)
+      count: count
     };
   }
 
@@ -523,11 +537,11 @@
       /* Force rows-wrap to a single stacked column regardless of Designer grid classes */
       'section.rb .rb-rows-wrap{display:flex !important;flex-direction:column !important;grid-template-columns:none !important;gap:0 !important}',
       /* Base row: kill Designer border/radius/background; keep only pointer + smooth transition */
-      'section.rb .rb-rows-wrap .rb-row{position:relative !important;cursor:pointer !important;background-color:transparent !important;background:none !important;border:0 !important;border-radius:0 !important;box-shadow:none !important;transition:background-color .2s ease !important;padding-left:14px !important;padding-top:14px !important;padding-bottom:14px !important;margin:0 !important}',
+      'section.rb .rb-rows-wrap .rb-row{position:relative !important;cursor:pointer !important;background-color:transparent !important;background:none !important;border:0 !important;border-radius:0 !important;padding:16px 12px !important;min-height:0 !important;transition:background-color .25s ease,transform .25s ease !important;will-change:background-color,transform}',
       /* Subtle horizontal divider between rows (all except the last) */
       'section.rb .rb-rows-wrap .rb-row + .rb-row{border-top:1px solid rgba(255,255,255,0.08) !important}',
       /* Left-edge active bar (invisible by default) */
-      'section.rb .rb-rows-wrap .rb-row::before{content:"" !important;position:absolute !important;left:0 !important;top:0 !important;bottom:0 !important;width:3px !important;background:#fff !important;opacity:0 !important;transition:opacity .2s ease !important;pointer-events:none !important;display:block !important}',
+      'section.rb .rb-rows-wrap .rb-row::before{content:"" !important;position:absolute !important;left:0 !important;top:0 !important;bottom:0 !important;width:3px !important;background:#fff !important;opacity:0 !important;transition:opacity .25s ease !important}',
       /* Active row: faint grey tint + visible left bar */
       'section.rb .rb-rows-wrap .rb-row.rb-row-active{background-color:rgba(255,255,255,0.05) !important}',
       'section.rb .rb-rows-wrap .rb-row.rb-row-active::before{opacity:1 !important}',
@@ -551,7 +565,7 @@
       '.rb-lb-lbl{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#aaa}',
       '.rb-lb-title{font-size:22px;font-weight:600;line-height:1.2}',
       '.rb-lb-text{font-size:14px;line-height:1.55;color:#ccc}',
-      '.rb-lb-close{position:absolute;top:10px;right:10px;width:36px;height:36px;border:0;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;display:grid;place-items:center;cursor:pointer;transition:background .15s ease;z-index:3}',
+      '.rb-lb-close{position:absolute;top:10px;right:10px;width:36px;height:36px;border:0;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;display:grid;place-items:center;cursor:pointer;transition:background-color .2s ease}',
       '.rb-lb-close:hover{background:rgba(255,255,255,.22)}',
       /* Tutorial overlay */
       '.rb-lb-tut{position:absolute;inset:0;display:none;align-items:center;justify-content:space-between;padding:0 8%;pointer-events:none;color:#fff;font-size:18px;letter-spacing:.04em}',
