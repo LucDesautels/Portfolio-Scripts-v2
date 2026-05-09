@@ -1,5 +1,5 @@
 /* =========================================================================
-   rb-carousel.js  v1.3.1
+   rb-carousel.js  v1.3.2
    Robotics section interactive carousel + cross-column sync + lightbox.
    Expected DOM (built in Webflow):
      section.rb
@@ -28,7 +28,7 @@
     if (!section) return;
     if (section.dataset.rbInit === '1') return;
     section.dataset.rbInit = '1';
-    try { console.log('[rb-carousel] v1.3.1 init'); } catch (e) {}
+    try { console.log('[rb-carousel] v1.3.2 init'); } catch (e) {}
 
     // -------------------------------------------------------------------
     // Inject runtime CSS (hover / active / transitions / lightbox / bars).
