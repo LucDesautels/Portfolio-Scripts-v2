@@ -1,11 +1,16 @@
 /* =========================================================================
-   rb-carousel.js  v1.5.0
+   rb-carousel.js  v1.6.0
    Robotics section interactive carousel + cross-column sync + lightbox.
+
+   v1.6.0 adds:
+   - Lightbox thumbnail strip below main image (decorative, not navigational).
+     Set per-row via data-extras="<url1>, <url2>, <url3>" on each .rb-row.
+     Up to 3 thumbnails rendered. If empty/missing: no strip rendered.
 
    v1.5.0 changes:
    - Lightbox: no auto-advance. Bars solid 100% up to current index.
-   - Lightbox: persistent left/right arrow indicators (not just on first open).
-   - Non-lightbox hover: bars fill instantly to hovered index, no animation.
+   - Lightbox: persistent left/right arrow indicators.
+   - Non-lightbox hover: bars fill instantly to hovered index.
    - Non-lightbox: when hover ends, the active-row timer resets to 0.
    - Both: clicking a progress bar segment jumps to that index.
    - Per-image content via data-caption and data-long-desc on each .rb-row.
@@ -31,7 +36,7 @@
     if (!section) return;
     if (section.dataset.rbInit === '1') return;
     section.dataset.rbInit = '1';
-    try { console.log('[rb-carousel] v1.5.0 init'); } catch (e) {}
+    try { console.log('[rb-carousel] v1.6.0 init'); } catch (e) {}
 
     injectStyles();
 
@@ -296,19 +301,22 @@
       '<div class="rb-lb-inner">',
       '  <div class="rb-lb-prog"></div>',
       '  <div class="rb-lb-main">',
-      '    <div class="rb-lb-imgwrap">',
-      '      <div class="rb-lb-nav-left" aria-label="Previous">',
-      '        <div class="rb-lb-arrow rb-lb-arrow-left">',
-      '          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      '    <div class="rb-lb-left">',
+      '      <div class="rb-lb-imgwrap">',
+      '        <div class="rb-lb-nav-left" aria-label="Previous">',
+      '          <div class="rb-lb-arrow rb-lb-arrow-left">',
+      '            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      '          </div>',
       '        </div>',
-      '      </div>',
-      '      <div class="rb-lb-nav-right" aria-label="Next">',
-      '        <div class="rb-lb-arrow rb-lb-arrow-right">',
-      '          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      '        <div class="rb-lb-nav-right" aria-label="Next">',
+      '          <div class="rb-lb-arrow rb-lb-arrow-right">',
+      '            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      '          </div>',
       '        </div>',
+      '        <img class="rb-lb-img" alt="">',
+      '        <div class="rb-lb-cap"></div>',
       '      </div>',
-      '      <img class="rb-lb-img" alt="">',
-      '      <div class="rb-lb-cap"></div>',
+      '      <div class="rb-lb-extras" aria-hidden="true"></div>',
       '    </div>',
       '    <div class="rb-lb-side">',
       '      <div class="rb-lb-lbl"></div>',
@@ -335,6 +343,7 @@
     var lbClose = lb.querySelector('.rb-lb-close');
     var lbLeft = lb.querySelector('.rb-lb-nav-left');
     var lbRight = lb.querySelector('.rb-lb-nav-right');
+    var lbExtras = lb.querySelector('.rb-lb-extras');
 
     var lbState = { col: null, idx: 0 };
 
@@ -363,6 +372,29 @@
       }
 
       lbCap.textContent = col.captions[i] || '';
+
+      // Extras strip: parse data-extras as comma-separated URLs, render up to 3.
+      lbExtras.innerHTML = '';
+      var extrasAttr = row && row.getAttribute('data-extras');
+      var extras = [];
+      if (extrasAttr) {
+        extras = extrasAttr.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      }
+      if (extras.length > 0) {
+        extras.slice(0, 3).forEach(function (url) {
+          var thumb = document.createElement('div');
+          thumb.className = 'rb-lb-extra';
+          var t = document.createElement('img');
+          t.src = url;
+          t.alt = '';
+          t.draggable = false;
+          thumb.appendChild(t);
+          lbExtras.appendChild(thumb);
+        });
+        lbExtras.style.display = 'flex';
+      } else {
+        lbExtras.style.display = 'none';
+      }
 
       // Build segments
       if (lbProg.childElementCount !== col.count) {
@@ -476,9 +508,14 @@
       '.rb-lb-fill{position:absolute;inset:0;width:0;background:rgba(255,255,255,.9);border-radius:2px}',
       /* Lightbox main */
       '.rb-lb-main{flex:1;display:grid;grid-template-columns:2fr 1fr;gap:16px;padding:8px 16px 16px;min-height:0}',
-      '.rb-lb-imgwrap{position:relative;background:#111;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center}',
+      '.rb-lb-left{display:flex;flex-direction:column;gap:12px;min-height:0;min-width:0}',
+      '.rb-lb-imgwrap{position:relative;flex:1;background:#111;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:0}',
       '.rb-lb-img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block}',
       '.rb-lb-cap{position:absolute;left:12px;bottom:10px;right:12px;font-size:13px;color:#ddd;text-shadow:0 1px 2px rgba(0,0,0,.6);pointer-events:none}',
+      /* Extras thumbnail strip (decorative) */
+      '.rb-lb-extras{display:none;flex-direction:row;gap:10px;flex:0 0 auto;height:120px}',
+      '.rb-lb-extra{flex:1;border-radius:8px;overflow:hidden;background:#111;display:flex;align-items:center;justify-content:center}',
+      '.rb-lb-extra img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}',
       /* Click halves */
       '.rb-lb-nav-left,.rb-lb-nav-right{position:absolute;top:0;bottom:0;width:50%;cursor:pointer;z-index:2;display:flex;align-items:center}',
       '.rb-lb-nav-left{left:0;justify-content:flex-start;padding-left:12px}',
@@ -499,6 +536,7 @@
       '  .rb-lb-main{grid-template-columns:1fr;grid-template-rows:1fr auto}',
       '  .rb-lb-inner{margin-top:2vh;height:96vh;width:96vw}',
       '  .rb-lb-arrow{width:36px;height:36px}',
+      '  .rb-lb-extras{height:80px;gap:6px}',
       '}'
     ].join('\n');
     var tag = document.createElement('style');
