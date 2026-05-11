@@ -1,6 +1,11 @@
 /* =========================================================================
-   rb-carousel.js  v1.6.0
+   rb-carousel.js  v1.7.0
    Robotics section interactive carousel + cross-column sync + lightbox.
+
+   v1.7.0 tweaks (lightbox layout):
+   - Main image hugs the top of the lightbox (no empty space above).
+   - Caption overlaid on the image bottom-left with glassy translucent look.
+   - Thumbnail strip taller to make use of reclaimed vertical space.
 
    v1.6.0 adds:
    - Lightbox thumbnail strip below main image (decorative, not navigational).
@@ -36,7 +41,7 @@
     if (!section) return;
     if (section.dataset.rbInit === '1') return;
     section.dataset.rbInit = '1';
-    try { console.log('[rb-carousel] v1.6.0 init'); } catch (e) {}
+    try { console.log('[rb-carousel] v1.7.0 init'); } catch (e) {}
 
     injectStyles();
 
@@ -509,11 +514,14 @@
       /* Lightbox main */
       '.rb-lb-main{flex:1;display:grid;grid-template-columns:2fr 1fr;gap:16px;padding:8px 16px 16px;min-height:0}',
       '.rb-lb-left{display:flex;flex-direction:column;gap:12px;min-height:0;min-width:0}',
-      '.rb-lb-imgwrap{position:relative;flex:1;background:#111;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:0}',
+      /* imgwrap: top-aligned so the main image hugs under the progress bars */
+      '.rb-lb-imgwrap{position:relative;flex:1;background:#111;border-radius:12px;overflow:hidden;display:flex;align-items:flex-start;justify-content:center;min-height:0}',
       '.rb-lb-img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block}',
-      '.rb-lb-cap{position:absolute;left:12px;bottom:10px;right:12px;font-size:13px;color:#ddd;text-shadow:0 1px 2px rgba(0,0,0,.6);pointer-events:none}',
-      /* Extras thumbnail strip (decorative) */
-      '.rb-lb-extras{display:none;flex-direction:row;gap:10px;flex:0 0 auto;height:120px}',
+      /* Caption: glassy overlay matching side panel aesthetic */
+      '.rb-lb-cap{position:absolute;left:12px;bottom:12px;max-width:calc(100% - 24px);font-size:13px;color:#fff;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px 12px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);pointer-events:none;line-height:1.4}',
+      '.rb-lb-cap:empty{display:none}',
+      /* Extras thumbnail strip (decorative) - taller now */
+      '.rb-lb-extras{display:none;flex-direction:row;gap:10px;flex:0 0 auto;height:180px}',
       '.rb-lb-extra{flex:1;border-radius:8px;overflow:hidden;background:#111;display:flex;align-items:center;justify-content:center}',
       '.rb-lb-extra img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}',
       /* Click halves */
@@ -536,7 +544,7 @@
       '  .rb-lb-main{grid-template-columns:1fr;grid-template-rows:1fr auto}',
       '  .rb-lb-inner{margin-top:2vh;height:96vh;width:96vw}',
       '  .rb-lb-arrow{width:36px;height:36px}',
-      '  .rb-lb-extras{height:80px;gap:6px}',
+      '  .rb-lb-extras{height:110px;gap:6px}',
       '}'
     ].join('\n');
     var tag = document.createElement('style');
